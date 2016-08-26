@@ -44,7 +44,7 @@ function exportSchema(cli) {
   const tableName = cli.flags.table || cli.showHelp();
   const dynamoDb = new AWS.DynamoDB({ region: cli.flags.region });
 
-  return dynamoDb.describeTable({ TableName: 'round-dev-templates' }).promise()
+  return dynamoDb.describeTable({ TableName: tableName }).promise()
     .then(data => {
       const table = data.Table;
 
