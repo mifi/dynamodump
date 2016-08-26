@@ -1,0 +1,33 @@
+{
+  "name": "dynamodump",
+  "version": "1.0.0",
+  "description": "Node cli for exporting & importing schema of DynamoDB tables",
+  "main": "cli.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mifi/dynamodump.git"
+  },
+  "author": {
+    "name": "Mikael Finstad",
+    "email": "finstaden@gmail.com",
+    "url": "mifi.no"
+  },
+  "license": "MIT",
+  "files": [
+    "cli.js"
+  ],
+  "bin": {
+    "dynamodump": "cli.js"
+  },
+  "engines": {
+    "node": ">=4"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.5.3",
+    "bluebird": "^3.4.3",
+    "meow": "^3.7.0",
+    "promise-poller": "^1.5.0",
+    "sanitize-filename": "^1.6.0"
+  }
+}
