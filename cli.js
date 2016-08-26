@@ -56,13 +56,13 @@ function exportSchema(cli) {
       delete table.ItemCount;
       delete table.TableArn;
 
-      table.LocalSecondaryIndexes.forEach(index => {
+      (table.LocalSecondaryIndexes || []).forEach(index => {
         delete index.IndexSizeBytes;
         delete index.ItemCount;
         delete index.IndexArn;
       });
 
-      table.GlobalSecondaryIndexes.forEach(index => {
+      (table.GlobalSecondaryIndexes || []).forEach(index => {
         delete index.IndexStatus;
         delete index.IndexSizeBytes;
         delete index.ItemCount;
