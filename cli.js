@@ -16,7 +16,7 @@ const cli = meow(`
       $ dynamodump import-schema <options>
 
       AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-      is specified in env variables or ~/.aws/config
+      is specified in env variables or ~/.aws/credentials
 
     Options
       --region AWS region
