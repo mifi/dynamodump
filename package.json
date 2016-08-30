@@ -1,6 +1,6 @@
 {
   "name": "dynamodump",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Node cli for exporting/importing schema/data of DynamoDB tables",
   "main": "cli.js",
   "scripts": {},
