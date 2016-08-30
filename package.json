@@ -28,11 +28,9 @@
     "aws-sdk": "^2.5.3",
     "bluebird": "^3.4.3",
     "debug": "^2.2.0",
-    "event-stream": "^3.3.4",
     "meow": "^3.7.0",
     "promise-poller": "^1.5.0",
     "sanitize-filename": "^1.6.0",
-    "stream-to-promise": "^2.2.0",
-    "throttle": "^1.0.3"
+    "stream-to-promise": "^2.2.0"
   }
 }
