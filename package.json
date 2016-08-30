@@ -1,7 +1,7 @@
 {
   "name": "dynamodump",
   "version": "1.0.2",
-  "description": "Node cli for exporting & importing schema of DynamoDB tables",
+  "description": "Node cli for exporting/importing schema/data of DynamoDB tables",
   "main": "cli.js",
   "scripts": {},
   "repository": {
@@ -24,10 +24,15 @@
     "node": ">=4"
   },
   "dependencies": {
+    "JSONStream": "^1.1.4",
     "aws-sdk": "^2.5.3",
     "bluebird": "^3.4.3",
+    "debug": "^2.2.0",
+    "event-stream": "^3.3.4",
     "meow": "^3.7.0",
     "promise-poller": "^1.5.0",
-    "sanitize-filename": "^1.6.0"
+    "sanitize-filename": "^1.6.0",
+    "stream-to-promise": "^2.2.0",
+    "throttle": "^1.0.3"
   }
 }
