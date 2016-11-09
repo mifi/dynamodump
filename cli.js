@@ -166,6 +166,8 @@ function filterTable(table) {
   delete table.TableSizeBytes;
   delete table.ItemCount;
   delete table.TableArn;
+  delete table.LatestStreamLabel;
+  delete table.LatestStreamArn;
 
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
