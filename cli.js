@@ -54,7 +54,10 @@ const methods = {
 const method = methods[cli.input[0]] || cli.showHelp();
 
 bluebird.resolve(method.call(undefined, cli))
-  .catch(err => console.error(err.stack));
+  .catch(err => {
+    console.error(err.stack);
+    process.exit(1);
+  });
 
 
 function listTablesCli(cli) {
