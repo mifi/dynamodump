@@ -26,6 +26,9 @@ dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test
 aws s3 cp backup s3://mybucket/ --recursive
 ```
 
+## Notes
+- Stream ARN will not be preserved during export/import
+
 ## TODO
 - Batch import: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchWriteItem-property
 

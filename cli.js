@@ -10,6 +10,7 @@ const promisePoller = require('promise-poller').default;
 const JSONStream = require('JSONStream');
 const streamToPromise = require('stream-to-promise');
 const debug = require('debug')('dynamodump');
+const _ = require('lodash');
 
 bluebird.promisifyAll(fs);
 
@@ -172,7 +173,7 @@ function filterTable(table) {
   delete table.LatestStreamLabel;
   delete table.LatestStreamArn;
 
-  (table.LocalSecondaryIndexes || []).forEach(index => {
+  (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
@@ -205,9 +206,18 @@ function importDataCli(cli) {
   const readStream = fs.createReadStream(file);
   const parseStream = JSONStream.parse('*');
 
+  let n = 0;
+
+  const logProgress = () => console.error('Imported', n, 'items');
+  const logThrottled = _.throttle(logProgress, 5000, { trailing: false });
+
   readStream.pipe(parseStream)
     .on('data', data => {
       debug('data');
+
+      n++;
+      logThrottled();
+
       parseStream.pause();
       dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
         .then(() => parseStream.resume())
@@ -217,7 +227,8 @@ function importDataCli(cli) {
   return new Promise((resolve, reject) => {
     parseStream.on('end', resolve);
     parseStream.on('error', reject);
-  });
+  })
+    .then(() => logProgress());
 }
 
 function exportDataCli(cli) {
@@ -247,11 +258,16 @@ function exportData(tableName, file, region) {
   const stringify = JSONStream.stringify();
   stringify.pipe(writeStream);
 
+  let n = 0;
+
   const params = { TableName: tableName };
   const scanPage = () => {
     return bluebird.resolve(dynamoDb.scan(params).promise())
       .then(data => {
         data.Items.forEach(item => stringify.write(item));
+
+        n += data.Items.length;
+        console.error('Exported', n, 'items');
 
         if (data.LastEvaluatedKey !== undefined) {
           params.ExclusiveStartKey = data.LastEvaluatedKey;
