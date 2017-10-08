@@ -24,7 +24,8 @@ const cli = meow(`
       $ dynamodump import-data <options>  Import all data into a table
       $ dynamodump export-all-data <options>  Export data from all tables
       $ dynamodump export-all <options>  Export data and schema from all tables
-
+      $ dynamodump wipe-data <options>  Wipe all data from a table
+      
       AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
       is specified in env variables or ~/.aws/credentials
 
@@ -39,7 +40,8 @@ const cli = meow(`
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
-`);
+      dynamodump wipe-data --region=eu-west-1 --table=mikael-test
+      `);
 
 const methods = {
   'export-schema': exportSchemaCli,
@@ -50,6 +52,7 @@ const methods = {
   'export-all-data': exportAllDataCli,
   'export-all': exportAllCli,
   'import-data': importDataCli,
+  'wipe-data': wipeDataCli
 };
 
 const method = methods[cli.input[0]] || cli.showHelp();
@@ -222,7 +225,7 @@ function importDataCli(cli) {
       dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
         .then(() => parseStream.resume())
         .catch(err => parseStream.emit('error', err));
-  });
+    });
 
   return new Promise((resolve, reject) => {
     parseStream.on('end', resolve);
@@ -292,3 +295,49 @@ function exportAllCli(cli) {
       .then(() => exportData(tableName, null, region))
   }, { concurrency: 1 });
 }
+
+function wipeDataCli(cli) {
+  const tableName = cli.flags.table;
+
+  if (!tableName) {
+    console.error('--table is requred')
+    cli.showHelp();
+  }
+
+  return wipeData(tableName, cli.flags.file, cli.flags.region);
+}
+
+function wipeData(tableName, file, region) {
+  const dynamoDb = new AWS.DynamoDB({ region });
+
+  let n = 0;
+
+  const params = { TableName: tableName };
+  const scanPage = () => {
+    return bluebird.resolve(dynamoDb.scan(params).promise())
+      .then(data => {
+        const promises = [];
+        data.Items.forEach(item => {
+          const key = {
+            TableName: tableName,
+            Key: item
+          };
+          promises.push(dynamoDb.deleteItem(key).promise());
+        });
+
+        n += data.Items.length;
+        console.error('Wiped', n, 'items');
+
+        if (data.LastEvaluatedKey === undefined) {
+          return Promise.all(promises);
+        } else {
+          params.ExclusiveStartKey = data.LastEvaluatedKey;
+          return Promise.all(promises)
+            .then(scanPage);
+        }
+      });
+  }
+
+  return scanPage();
+}
+
