@@ -25,7 +25,7 @@
     "cli.js"
   ],
   "bin": {
-    "dynamodump": "cli.js"
+    "dynamodump2": "cli.js"
   },
   "engines": {
     "node": ">=4"
