@@ -316,25 +316,22 @@ function wipeData(tableName, file, region) {
   const scanPage = () => {
     return bluebird.resolve(dynamoDb.scan(params).promise())
       .then(data => {
-        const promises = [];
-        data.Items.forEach(item => {
+        return Promise.map(data.Items, item => {
           const key = {
             TableName: tableName,
             Key: item
           };
-          promises.push(dynamoDb.deleteItem(key).promise());
+          return dynamoDb.deleteItem(key).promise();
+        }).then(() => {
+          n += data.Items.length;
+          console.error('Wiped', n, 'items');
+
+          if (data.LastEvaluatedKey !== undefined) {
+            params.ExclusiveStartKey = data.LastEvaluatedKey;
+            return scanPage();
+          }
+          return true;
         });
-
-        n += data.Items.length;
-        console.error('Wiped', n, 'items');
-
-        if (data.LastEvaluatedKey === undefined) {
-          return Promise.all(promises);
-        } else {
-          params.ExclusiveStartKey = data.LastEvaluatedKey;
-          return Promise.all(promises)
-            .then(scanPage);
-        }
       });
   }
 
