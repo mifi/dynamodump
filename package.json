@@ -1,12 +1,12 @@
 {
-  "name": "dynamodump2",
-  "version": "1.2.1",
-  "description": "Node cli for exporting/importing/wiping schema/data of DynamoDB tables",
+  "name": "dynamodump",
+  "version": "1.2.0",
+  "description": "Node cli for exporting/importing schema, exporting/importing/wiping data of DynamoDB tables",
   "main": "cli.js",
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/ssetti/dynamodump.git"
+    "url": "https://github.com/mifi/dynamodump.git"
   },
   "author": {
     "name": "Mikael Finstad",
@@ -25,7 +25,7 @@
     "cli.js"
   ],
   "bin": {
-    "dynamodump2": "cli.js"
+    "dynamodump": "cli.js"
   },
   "engines": {
     "node": ">=4"

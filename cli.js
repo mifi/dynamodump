@@ -34,13 +34,14 @@ const cli = meow(`
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
+      --throughput Enables throttling wiping of data
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
-      dynamodump wipe-data --region=eu-west-1 --table=mikael-test
+      dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
       `);
 
 const methods = {
@@ -304,40 +305,63 @@ function wipeDataCli(cli) {
     cli.showHelp();
   }
 
-  return wipeData(tableName, cli.flags.file, cli.flags.region);
+  let throughput = 10;
+  if (!cli.flags.throughput) {
+    throughput = 10;
+  } else if (parseInt(cli.flags.throughput, 10) === cli.flags.throughput) {
+    throughput = cli.flags.throughput;
+  } else {
+    console.error('--throughput should be integer');
+    cli.showHelp();
+  }
+
+  return wipeData(tableName, cli.flags.region, throughput);
 }
 
-function wipeData(tableName, file, region) {
+function wipeData(tableName, region, throughput) {
   const dynamoDb = new AWS.DynamoDB({ region });
 
   let n = 0;
 
-  const params = { TableName: tableName };
-  const scanPage = () => {
+  const params = {
+    TableName: tableName,
+    Limit: throughput
+  };
+
+  const scanPage = (keyFields) => {
     return bluebird.resolve(dynamoDb.scan(params).promise())
       .then(data => {
-        const promises = [];
-        data.Items.forEach(item => {
-          const key = {
+        return bluebird.map(data.Items, item => {
+          const delParams = {
             TableName: tableName,
-            Key: item
+            Key: _.pick(item, keyFields)
           };
-          promises.push(dynamoDb.deleteItem(key).promise());
+          return dynamoDb.deleteItem(delParams).promise();
+        }).then(() => {
+          n += data.Items.length;
+          console.error('Wiped', n, 'items');
+
+          if (data.LastEvaluatedKey !== undefined) {
+            params.ExclusiveStartKey = data.LastEvaluatedKey;
+            return scanPage(keyFields);
+          }
+          return true;
         });
-
-        n += data.Items.length;
-        console.error('Wiped', n, 'items');
-
-        if (data.LastEvaluatedKey === undefined) {
-          return Promise.all(promises);
-        } else {
-          params.ExclusiveStartKey = data.LastEvaluatedKey;
-          return Promise.all(promises)
-            .then(scanPage);
-        }
       });
   }
 
-  return scanPage();
+  return dynamoDb.describeTable({ TableName: tableName }).promise()
+    .then((table) => {
+      const hashKeyElement = _.filter(table.Table.KeySchema, entry => entry.KeyType === 'HASH');
+      const rangeKeyElement = _.filter(table.Table.KeySchema, entry => entry.KeyType === 'RANGE');
+
+      const keyFields = [];
+      keyFields.push(hashKeyElement[0].AttributeName);
+      if (rangeKeyElement && rangeKeyElement.length > 0) {
+        keyFields.push(rangeKeyElement[0].AttributeName);
+      }
+
+      return scanPage(keyFields);
+    });
 }
 
