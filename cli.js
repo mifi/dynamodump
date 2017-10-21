@@ -25,7 +25,7 @@ const cli = meow(`
       $ dynamodump export-all-data <options>  Export data from all tables
       $ dynamodump export-all <options>  Export data and schema from all tables
       $ dynamodump wipe-data <options>  Wipe all data from a table
-      
+
       AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
       is specified in env variables or ~/.aws/credentials
 
@@ -34,7 +34,7 @@ const cli = meow(`
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
-      --throughput Enables throttling wiping of data
+      --throughput How many rows to delete in parallel (wipe-data)
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -306,13 +306,14 @@ function wipeDataCli(cli) {
   }
 
   let throughput = 10;
-  if (!cli.flags.throughput) {
-    throughput = 10;
-  } else if (parseInt(cli.flags.throughput, 10) === cli.flags.throughput) {
-    throughput = cli.flags.throughput;
-  } else {
-    console.error('--throughput should be integer');
-    cli.showHelp();
+
+  if (cli.flags.throughput !== undefined) {
+    if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
+      throughput = cli.flags.throughput;
+    } else {
+      console.error('--throughput must be a positive integer');
+      cli.showHelp();
+    }
   }
 
   return wipeData(tableName, cli.flags.region, throughput);
@@ -345,7 +346,6 @@ function wipeData(tableName, region, throughput) {
             params.ExclusiveStartKey = data.LastEvaluatedKey;
             return scanPage(keyFields);
           }
-          return true;
         });
       });
   }
@@ -364,4 +364,3 @@ function wipeData(tableName, region, throughput) {
       return scanPage(keyFields);
     });
 }
-
