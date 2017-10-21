@@ -10,6 +10,7 @@ const promisePoller = require('promise-poller').default;
 const JSONStream = require('JSONStream');
 const streamToPromise = require('stream-to-promise');
 const debug = require('debug')('dynamodump');
+const awsConfig = require('aws-config');
 const _ = require('lodash');
 
 bluebird.promisifyAll(fs);
@@ -33,6 +34,7 @@ const cli = meow(`
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
+      --profile utilize named profile from .aws/credentials file
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -54,6 +56,11 @@ const methods = {
 
 const method = methods[cli.input[0]] || cli.showHelp();
 
+const awsParams = {
+  region: cli.flags.region,
+  profile: cli.flags.profile
+};
+
 bluebird.resolve(method.call(undefined, cli))
   .catch(err => {
     console.error(err.stack);
@@ -62,14 +69,12 @@ bluebird.resolve(method.call(undefined, cli))
 
 
 function listTablesCli(cli) {
-  const region = cli.flags.region;
-
-  return listTables(region)
+  return listTables(awsParams)
     .then(tables => console.log(tables.join(' ')));
 }
 
-function listTables(region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function listTables(awsParams) {
+  const dynamoDb = new AWS.DynamoDB(awsConfig(awsParams));
 
   const params = {};
 
@@ -98,19 +103,18 @@ function exportSchemaCli(cli) {
     cli.showHelp();
   }
 
-  return exportSchema(tableName, cli.flags.file, cli.flags.region)
+  return exportSchema(tableName, cli.flags.file, awsParams);
 }
 
 function exportAllSchemaCli(cli) {
-  const region = cli.flags.region;
-  return bluebird.map(listTables(region), tableName => {
+  return bluebird.map(listTables(awsParams), tableName => {
     console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region);
+    return exportSchema(tableName, null, awsParams);
   }, { concurrency: 1 });
 }
 
-function exportSchema(tableName, file, region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function exportSchema(tableName, file, awsParams) {
+  const dynamoDb = new AWS.DynamoDB(awsConfig(awsParams));
 
   return dynamoDb.describeTable({ TableName: tableName }).promise()
     .then(data => {
@@ -124,7 +128,6 @@ function exportSchema(tableName, file, region) {
 function importSchemaCli(cli) {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
-  const region = cli.flags.region;
   const waitForActive = cli.flags.waitForActive;
 
   if (!file) {
@@ -132,7 +135,7 @@ function importSchemaCli(cli) {
     cli.showHelp();
   }
 
-  const dynamoDb = new AWS.DynamoDB({ region });
+  const dynamoDb = new AWS.DynamoDB(awsConfig(awsParams));
 
   const doWaitForActive = () => promisePoller({
     taskFn: () => {
@@ -190,7 +193,6 @@ function filterTable(table) {
 function importDataCli(cli) {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
-  const region = cli.flags.region;
 
   if (!tableName) {
     console.error('--table is requred')
@@ -201,7 +203,7 @@ function importDataCli(cli) {
     cli.showHelp();
   }
 
-  const dynamoDb = new AWS.DynamoDB({ region });
+  const dynamoDb = new AWS.DynamoDB(awsConfig(awsParams));
 
   const readStream = fs.createReadStream(file);
   const parseStream = JSONStream.parse('*');
@@ -244,14 +246,14 @@ function exportDataCli(cli) {
 
 function exportAllDataCli(cli) {
   const region = cli.flags.region;
-  return bluebird.map(listTables(region), tableName => {
+  return bluebird.map(listTables(awsParams), tableName => {
     console.error(`Exporting ${tableName}`);
     return exportData(tableName, null, region);
   }, { concurrency: 1 });
 }
 
 function exportData(tableName, file, region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+  const dynamoDb = new AWS.DynamoDB(awsConfig(awsParams));
 
   const file2 = file || sanitizeFilename(tableName + '.dynamodata');
   const writeStream = fs.createWriteStream(file2);
@@ -286,9 +288,9 @@ function exportData(tableName, file, region) {
 
 function exportAllCli(cli) {
   const region = cli.flags.region;
-  return bluebird.map(listTables(region), tableName => {
+  return bluebird.map(listTables(awsParams), tableName => {
     console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region)
+    return exportSchema(tableName, null, awsParams)
       .then(() => exportData(tableName, null, region))
   }, { concurrency: 1 });
 }
