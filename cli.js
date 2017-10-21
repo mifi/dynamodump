@@ -35,6 +35,7 @@ const cli = meow(`
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
       --throughput How many rows to delete in parallel (wipe-data)
+      --max-retries Set AWS maxRetries
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -55,6 +56,8 @@ const methods = {
   'import-data': importDataCli,
   'wipe-data': wipeDataCli
 };
+
+if (cli.flags.maxRetries !== undefined) AWS.config.maxRetries = cli.flags.maxRetries;
 
 const method = methods[cli.input[0]] || cli.showHelp();
 
