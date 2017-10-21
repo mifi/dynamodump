@@ -22,6 +22,8 @@ dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schem
 dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
 dynamodump export-all-data --region=eu-west-1
 dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
+dynamodump wipe-data --throughput 5 --table your-table --region eu-west-1
+AWS_PROFILE=customprofile dynamodump list-tables
 ```
 
 ## Backup all tables with structure/data to s3
