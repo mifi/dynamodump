@@ -34,6 +34,7 @@ const cli = meow(`
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
+      --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
       --max-retries Set AWS maxRetries
 
@@ -60,6 +61,10 @@ const methods = {
 if (cli.flags.maxRetries !== undefined) AWS.config.maxRetries = cli.flags.maxRetries;
 
 const method = methods[cli.input[0]] || cli.showHelp();
+
+if (cli.flags.profile) {
+  AWS.config.credentials = new AWS.SharedIniFileCredentials({profile: cli.flags.profile});
+}
 
 bluebird.resolve(method.call(undefined, cli))
   .catch(err => {
