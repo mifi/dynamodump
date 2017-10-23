@@ -24,6 +24,7 @@ const cli = meow(`
       $ dynamodump import-data <options>  Import all data into a table
       $ dynamodump export-all-data <options>  Export data from all tables
       $ dynamodump export-all <options>  Export data and schema from all tables
+      $ dynamodump wipe-data <options>  Wipe all data from a table
 
       AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
       is specified in env variables or ~/.aws/credentials
@@ -34,13 +35,16 @@ const cli = meow(`
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
       --profile utilize named profile from .aws/credentials file
+      --throughput How many rows to delete in parallel (wipe-data)
+      --max-retries Set AWS maxRetries
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
-`);
+      dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
+      `);
 
 const methods = {
   'export-schema': exportSchemaCli,
@@ -51,7 +55,10 @@ const methods = {
   'export-all-data': exportAllDataCli,
   'export-all': exportAllCli,
   'import-data': importDataCli,
+  'wipe-data': wipeDataCli
 };
+
+if (cli.flags.maxRetries !== undefined) AWS.config.maxRetries = cli.flags.maxRetries;
 
 const method = methods[cli.input[0]] || cli.showHelp();
 
@@ -227,7 +234,7 @@ function importDataCli(cli) {
       dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
         .then(() => parseStream.resume())
         .catch(err => parseStream.emit('error', err));
-  });
+    });
 
   return new Promise((resolve, reject) => {
     parseStream.on('end', resolve);
@@ -296,4 +303,72 @@ function exportAllCli(cli) {
     return exportSchema(tableName, null, region)
       .then(() => exportData(tableName, null, region))
   }, { concurrency: 1 });
+}
+
+function wipeDataCli(cli) {
+  const tableName = cli.flags.table;
+
+  if (!tableName) {
+    console.error('--table is requred')
+    cli.showHelp();
+  }
+
+  let throughput = 10;
+
+  if (cli.flags.throughput !== undefined) {
+    if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
+      throughput = cli.flags.throughput;
+    } else {
+      console.error('--throughput must be a positive integer');
+      cli.showHelp();
+    }
+  }
+
+  return wipeData(tableName, cli.flags.region, throughput);
+}
+
+function wipeData(tableName, region, throughput) {
+  const dynamoDb = new AWS.DynamoDB({ region });
+
+  let n = 0;
+
+  const params = {
+    TableName: tableName,
+    Limit: throughput
+  };
+
+  const scanPage = (keyFields) => {
+    return bluebird.resolve(dynamoDb.scan(params).promise())
+      .then(data => {
+        return bluebird.map(data.Items, item => {
+          const delParams = {
+            TableName: tableName,
+            Key: _.pick(item, keyFields)
+          };
+          return dynamoDb.deleteItem(delParams).promise();
+        }).then(() => {
+          n += data.Items.length;
+          console.error('Wiped', n, 'items');
+
+          if (data.LastEvaluatedKey !== undefined) {
+            params.ExclusiveStartKey = data.LastEvaluatedKey;
+            return scanPage(keyFields);
+          }
+        });
+      });
+  }
+
+  return dynamoDb.describeTable({ TableName: tableName }).promise()
+    .then((table) => {
+      const hashKeyElement = _.filter(table.Table.KeySchema, entry => entry.KeyType === 'HASH');
+      const rangeKeyElement = _.filter(table.Table.KeySchema, entry => entry.KeyType === 'RANGE');
+
+      const keyFields = [];
+      keyFields.push(hashKeyElement[0].AttributeName);
+      if (rangeKeyElement && rangeKeyElement.length > 0) {
+        keyFields.push(rangeKeyElement[0].AttributeName);
+      }
+
+      return scanPage(keyFields);
+    });
 }
