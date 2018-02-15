@@ -184,6 +184,7 @@ function filterTable(table) {
   delete table.TableArn;
   delete table.LatestStreamLabel;
   delete table.LatestStreamArn;
+  delete table.TableId;
 
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
@@ -196,6 +197,7 @@ function filterTable(table) {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
+    delete index.ProvisionedThroughput.NumberOfDecreasesToday;
   });
 }
 
