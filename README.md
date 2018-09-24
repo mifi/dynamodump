@@ -1,4 +1,4 @@
-# dynamodump
+# dynamodump 🕋→💾
 Node cli for exporting &amp; importing schema and data from DynamoDB tables. I didn't find any other node tools for dumping table schema (structure, indexes etc), they all just dump data.
 
 
