@@ -44,3 +44,4 @@ aws s3 cp backup s3://mybucket/ --recursive
 - https://github.com/PageUpPeopleOrg/dynamodb-replicator
 - https://github.com/bchew/dynamodump
 - https://github.com/yegor256/dynamo-archive
+- https://github.com/mifi/cognito-backup
