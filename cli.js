@@ -208,6 +208,10 @@ function filterTable(table) {
     delete index.ItemCount;
     delete index.IndexArn;
     delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+    delete index.ProvisionedThroughput.LastIncreaseDateTime;
+    delete index.ProvisionedThroughput.LastDecreaseDateTime;
+    index.ProvisionedThroughput.ReadCapacityUnits = 100;
+    index.ProvisionedThroughput.WriteCapacityUnits = 100;
   });
 }
 
