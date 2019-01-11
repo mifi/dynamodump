@@ -186,6 +186,16 @@ function filterTable(table) {
   delete table.LatestStreamArn;
   delete table.TableId;
 
+  // to support billing mode
+  if (table.BillingModeSummary) {
+    table.BillingMode = table.BillingModeSummary.BillingMode;
+    delete table.BillingModeSummary;
+    table.ProvisionedThroughput = {
+      ReadCapacityUnits: 100,
+      WriteCapacityUnits: 100
+    };
+  }
+
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
