@@ -32,8 +32,9 @@ const cli = meow(`
     Options
       --region AWS region
       --endpoint AWS DynamoDB endpoint
-      --writeCapacityUnits writeCapacityUnits when the BillingMode is PAY_PER_REQUEST
-      --readCapacityUnits readCapacityUnits when the billingMode is PAY_PER_REQUEST
+      --billing-mode To set the BillingMode property of the table when importing the data
+      --write-capacity To set the ProvisionedThroughput.WriteCapacityUnits property of the table when importing the schema
+      --read-capacity To set the ProvisionedThroughput.ReadCapacityUnits property of the table when importing the schema
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --wait-for-active Wait for table to become active when importing schema
@@ -44,6 +45,8 @@ const cli = meow(`
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
+      dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED \
+            --write-capacity=1 --read-capacity=1 --table=your-table --file=your-schema-dump
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
       dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
@@ -145,8 +148,9 @@ function importSchemaCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
   const waitForActive = cli.flags.waitForActive;
-  const writeCapacityUnits = cli.flags.writeCapacityUnits || 10;
-  const readCapacityUnits = cli.flags.readCapacityUnits || 10;
+  const billingMode = cli.flags.billingMode;
+  const writeCapacityUnits = cli.flags.writeCapacity;
+  const readCapacityUnits = cli.flags.readCapacity;
 
   if (!file) {
     console.error('--file is requred')
@@ -171,7 +175,7 @@ function importSchemaCli(cli) {
     .then(json => {
       if (tableName) json.TableName = tableName;
 
-      filterTable(json, writeCapacityUnits, readCapacityUnits);
+      filterTable(json, billingMode, writeCapacityUnits, readCapacityUnits);
 
       return dynamoDb.createTable(json).promise()
         .then(() => {
@@ -182,7 +186,7 @@ function importSchemaCli(cli) {
     });
 }
 
-function filterTable(table, writeCapacityUnits = 10, readCapacityUnits = 10) {
+function filterTable(table, forcedBillingMode, forcedWriteCapacityUnits, forcedReadCapacityUnits) {
   delete table.TableStatus;
   delete table.CreationDateTime;
   delete table.ProvisionedThroughput.LastIncreaseDateTime;
@@ -195,13 +199,22 @@ function filterTable(table, writeCapacityUnits = 10, readCapacityUnits = 10) {
   delete table.LatestStreamArn;
   delete table.TableId;
 
-  if (table.BillingModeSummary) {
+  if (forcedBillingMode) {
+    table.BillingMode = forcedBillingMode;
+  } else if (table.BillingModeSummary) {
     table.BillingMode = table.BillingModeSummary.BillingMode;
-    delete table.BillingModeSummary;
-    table.ProvisionedThroughput = {
-      ReadCapacityUnits: readCapacityUnits,
-      WriteCapacityUnits: writeCapacityUnits
-    };
+  }
+  delete table.BillingModeSummary;
+
+  if (table.BillingMode !== 'PAY_PER_REQUEST') {
+    if (forcedReadCapacityUnits) {
+      table.ProvisionedThroughput.ReadCapacityUnits = forcedReadCapacityUnits;
+    }
+    if (forcedWriteCapacityUnits) {
+      table.ProvisionedThroughput.WriteCapacityUnits = forcedWriteCapacityUnits;
+    }
+  } else {
+    delete table.ProvisionedThroughput;
   }
 
   (table.LocalSecondaryIndexes || []).forEach(index => {
@@ -215,11 +228,21 @@ function filterTable(table, writeCapacityUnits = 10, readCapacityUnits = 10) {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
-    delete index.ProvisionedThroughput.NumberOfDecreasesToday;
-    delete index.ProvisionedThroughput.LastIncreaseDateTime;
-    delete index.ProvisionedThroughput.LastDecreaseDateTime;
-    index.ProvisionedThroughput.ReadCapacityUnits = readCapacityUnits;
-    index.ProvisionedThroughput.WriteCapacityUnits = writeCapacityUnits;
+
+    if (table.BillingMode !== 'PAY_PER_REQUEST') {
+      delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+      delete index.ProvisionedThroughput.LastIncreaseDateTime;
+      delete index.ProvisionedThroughput.LastDecreaseDateTime;
+
+      if (forcedReadCapacityUnits) {
+        index.ProvisionedThroughput.ReadCapacityUnits = forcedReadCapacityUnits;
+      }
+      if (forcedWriteCapacityUnits) {
+        index.ProvisionedThroughput.WriteCapacityUnits = forcedWriteCapacityUnits;
+      }
+    } else {
+      delete index.ProvisionedThroughput;
+    }
   });
 }
 
