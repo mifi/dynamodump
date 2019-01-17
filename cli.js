@@ -151,6 +151,7 @@ function importSchemaCli(cli) {
   const billingMode = cli.flags.billingMode;
   const writeCapacityUnits = cli.flags.writeCapacity;
   const readCapacityUnits = cli.flags.readCapacity;
+  const force = cli.flags.force;
 
   if (!file) {
     console.error('--file is requred')
@@ -170,8 +171,44 @@ function importSchemaCli(cli) {
     retries: 60
   });
 
+  const doWaitForDeleted = () => promisePoller({
+    taskFn: () => {
+      return new Promise((resolve, reject) => {
+        dynamoDb.describeTable({ TableName: tableName }).promise()
+          .then(reject)
+          .catch(err => {
+            if (err.code === 'ResourceNotFoundException') {
+              resolve();
+            } else {
+              reject();
+            }
+          });
+      });
+    },
+    interval: 1000,
+    retries: 600
+  });
+
   fs.readFileAsync(file)
     .then(data => JSON.parse(data))
+    .then(json => {
+      if (!force) {
+        return json;
+      }
+
+      return new Promise((resolve, reject) => {
+        dynamoDb.deleteTable({ TableName: tableName || json.TableName }).promise()
+          .catch(err => {
+            if (err.code === 'ResourceNotFoundException') {
+              resolve();
+            } else {
+              reject();
+            }
+          })
+          .then(doWaitForDeleted)
+          .then(resolve);
+      });
+    })
     .then(json => {
       if (tableName) json.TableName = tableName;
 
