@@ -207,7 +207,7 @@ function importSchemaCli(cli) {
             }
           })
           .then(doWaitForDeleted)
-          .then(resolve(json));
+          .then(() => resolve(json));
       });
     })
     .then(json => {
