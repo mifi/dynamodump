@@ -201,13 +201,13 @@ function importSchemaCli(cli) {
         dynamoDb.deleteTable({ TableName: tableName || json.TableName }).promise()
           .catch(err => {
             if (err.code === 'ResourceNotFoundException') {
-              resolve();
+              resolve(json);
             } else {
               reject();
             }
           })
           .then(doWaitForDeleted)
-          .then(resolve);
+          .then(resolve(json));
       });
     })
     .then(json => {
