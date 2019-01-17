@@ -45,7 +45,7 @@ const cli = meow(`
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
-      dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED \
+      dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED \\
             --write-capacity=1 --read-capacity=1 --table=your-table --file=your-schema-dump
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
