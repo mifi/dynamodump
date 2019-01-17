@@ -33,8 +33,8 @@ const cli = meow(`
       --region AWS region
       --endpoint AWS DynamoDB endpoint
       --billing-mode To set the BillingMode property of the table when importing the data
-      --write-capacity To set the ProvisionedThroughput.WriteCapacityUnits property of the table when importing the schema
-      --read-capacity To set the ProvisionedThroughput.ReadCapacityUnits property of the table when importing the schema
+      --write-capacity To set the ProvisionedThroughput.WriteCapacityUnits property of the table AND indices when importing the schema
+      --read-capacity To set the ProvisionedThroughput.ReadCapacityUnits property of the table AND indices when importing the schema
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
       --force Pre-deletes the table that we're importing the schema into in case the table exists (import-schema)
