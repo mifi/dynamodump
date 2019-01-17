@@ -37,7 +37,7 @@ const cli = meow(`
       --read-capacity To set the ProvisionedThroughput.ReadCapacityUnits property of the table when importing the schema
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
-      --force Pre-deletes the table that we're exporting the schema into in case the table exists (import-schema)
+      --force Pre-deletes the table that we're importing the schema into in case the table exists (import-schema)
       --wait-for-active Wait for table to become active when importing schema
       --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
@@ -47,7 +47,7 @@ const cli = meow(`
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
       dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED \\
-            --write-capacity=1 --read-capacity=1 --table=your-table --file=your-schema-dump
+            --force --write-capacity=10 --read-capacity=10 --table=your-table --file=your-schema-dump
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
       dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
