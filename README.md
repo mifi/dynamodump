@@ -1,7 +1,7 @@
 # dynamodump 🕋→💾
 Node cli for exporting &amp; importing schema and data from DynamoDB tables. I didn't find any other node tools for dumping table schema (structure, indexes etc), they all just dump data.
 
-
+Supports on-demand capacity tables.
 
 ## Install
 ```
@@ -19,6 +19,7 @@ dynamodump
 dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
 dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
 dynamodump export-all-data --region=eu-west-1
+dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED --force --write-capacity=10 --read-capacity=10 --table=your-table --file=your-schema-dump
 dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
 dynamodump wipe-data --throughput 5 --table your-table --region eu-west-1
 AWS_PROFILE=customprofile dynamodump list-tables
