@@ -182,9 +182,9 @@ function filterTable(table) {
   delete table.TableSizeBytes;
   delete table.ItemCount;
   delete table.TableArn;
+  delete table.TableId;
   delete table.LatestStreamLabel;
   delete table.LatestStreamArn;
-  delete table.TableId;
 
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
@@ -197,7 +197,11 @@ function filterTable(table) {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
-    delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+    if (index.ProvisionedThroughput) {
+      delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+      delete index.ProvisionedThroughput.LastIncreasedDateTime;
+      delete index.ProvisionedThroughput.LastDecreasedDateTime;
+    }
   });
 }
 
