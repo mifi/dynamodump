@@ -185,6 +185,7 @@ function filterTable(table) {
   delete table.TableId;
   delete table.LatestStreamLabel;
   delete table.LatestStreamArn;
+  delete table.TableId;
 
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
@@ -218,6 +219,17 @@ function importDataCli(cli) {
     console.error('--file is requred')
     cli.showHelp();
   }
+  let throughput = 1;
+
+  if (cli.flags.throughput !== undefined) {
+    if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
+      throughput = cli.flags.throughput;
+    } else {
+      console.error('--throughput must be a positive integer');
+      cli.showHelp();
+      return;
+    }
+  }
 
   const dynamoDb = new AWS.DynamoDB({ region });
 
@@ -236,7 +248,9 @@ function importDataCli(cli) {
       n++;
       logThrottled();
 
-      parseStream.pause();
+      if (n >= throughput) {
+        parseStream.pause();
+      }
       dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
         .then(() => parseStream.resume())
         .catch(err => parseStream.emit('error', err));

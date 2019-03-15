@@ -1,4 +1,4 @@
-# dynamodump
+# dynamodump 🕋→💾
 Node cli for exporting &amp; importing schema and data from DynamoDB tables. I didn't find any other node tools for dumping table schema (structure, indexes etc), they all just dump data.
 
 
@@ -44,3 +44,4 @@ aws s3 cp backup s3://mybucket/ --recursive
 - https://github.com/PageUpPeopleOrg/dynamodb-replicator
 - https://github.com/bchew/dynamodump
 - https://github.com/yegor256/dynamo-archive
+- https://github.com/mifi/cognito-backup
