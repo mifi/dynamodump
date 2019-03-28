@@ -153,7 +153,7 @@ function importSchemaCli(cli) {
           if (data.Table.TableStatus !== 'ACTIVE') throw new Error();
         });
     },
-    interval: 1000,
+    interval: 5000,
     retries: 60
   });
 
@@ -200,8 +200,8 @@ function filterTable(table) {
     delete index.IndexArn;
     if (index.ProvisionedThroughput) {
       delete index.ProvisionedThroughput.NumberOfDecreasesToday;
-      delete index.ProvisionedThroughput.LastIncreasedDateTime;
-      delete index.ProvisionedThroughput.LastDecreasedDateTime;
+      delete index.ProvisionedThroughput.LastIncreaseDateTime;
+      delete index.ProvisionedThroughput.LastDecreaseDateTime;
     }
   });
 }
@@ -237,8 +237,9 @@ function importDataCli(cli) {
   const parseStream = JSONStream.parse('*');
 
   let n = 0;
+  let throttledN = 0;
 
-  const logProgress = () => console.error('Imported', n, 'items');
+  const logProgress = () => console.error('Imported', n, 'items into', tableName);
   const logThrottled = _.throttle(logProgress, 5000, { trailing: false });
 
   readStream.pipe(parseStream)
@@ -246,14 +247,27 @@ function importDataCli(cli) {
       debug('data');
 
       n++;
+      throttledN++;
+
       logThrottled();
 
-      if (n >= throughput) {
+      if (throttledN >= throughput) {
         parseStream.pause();
+        throttledN = 0;
+        setTimeout(() => {
+          parseStream.resume();
+        }, 2 * 1000);
       }
+
       dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
-        .then(() => parseStream.resume())
-        .catch(err => parseStream.emit('error', err));
+        .catch(err => {
+          parseStream.pause();
+          setTimeout(() => {
+            dynamoDb.putItem({ TableName: tableName, Item: data }).promise()
+              .then(() => parseStream.resume())
+              .catch(() => parseStream.emit('error', err));
+          }, 300 * 1000);
+        });
     });
 
   return new Promise((resolve, reject) => {
