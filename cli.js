@@ -39,6 +39,7 @@ const cli = meow(`
       --throughput How many rows to delete in parallel (wipe-data)
       --max-retries Set AWS maxRetries
       --ca-file Set certificate authority
+      --marshall Converts JSON to/from DynamoDB record on import/export
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -251,7 +252,10 @@ function importDataCli(cli) {
     .on('data', data => {
       debug('data');
 
-      data = AWS.DynamoDB.Converter.marshall(data);
+      if (cli.flags.marshall) {
+        data = AWS.DynamoDB.Converter.marshall(data);
+      }
+
       n++;
       logThrottled();
 
@@ -304,7 +308,9 @@ function exportData(tableName, file, region) {
     return bluebird.resolve(dynamoDb.scan(params).promise())
       .then(data => {
         data.Items.forEach(item => {
-          item = AWS.DynamoDB.Converter.unmarshall(item);
+          if (cli.flags.marshall) {
+            item = AWS.DynamoDB.Converter.unmarshall(item);
+          }
           return stringify.write(item)
         });
 
