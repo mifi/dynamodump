@@ -31,8 +31,13 @@ const cli = meow(`
 
     Options
       --region AWS region
+      --endpoint AWS DynamoDB endpoint
+      --billing-mode To set the BillingMode property of the table when importing the data
+      --write-capacity To set the ProvisionedThroughput.WriteCapacityUnits property of the table AND indices when importing the schema
+      --read-capacity To set the ProvisionedThroughput.ReadCapacityUnits property of the table AND indices when importing the schema
       --file File name to export to or import from (defaults to table_name.dynamoschema and table_name.dynamodata)
       --table Table to export. When importing, this will override the TableName from the schema dump file
+      --force Pre-deletes the table that we're importing the schema into in case the table exists (import-schema)
       --wait-for-active Wait for table to become active when importing schema
       --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
@@ -41,6 +46,8 @@ const cli = meow(`
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
       dynamodump import-schema --region=eu-west-1 --file=your-schema-dump --table=your-table --wait-for-active
+      dynamodump import-schema --region=eu-west-1 --endpoint=localhost:8000 --billing-mode=PROVISIONED \\
+            --force --write-capacity=10 --read-capacity=10 --table=your-table --file=your-schema-dump
       dynamodump export-all-data --region=eu-west-1
       dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
       dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
@@ -75,13 +82,14 @@ bluebird.resolve(method.call(undefined, cli))
 
 function listTablesCli(cli) {
   const region = cli.flags.region;
+  const endpoint = cli.flags.endpoint;
 
-  return listTables(region)
+  return listTables(region, endpoint)
     .then(tables => console.log(tables.join(' ')));
 }
 
-function listTables(region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function listTables(region, endpoint) {
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   const params = {};
 
@@ -104,25 +112,27 @@ function listTables(region) {
 
 function exportSchemaCli(cli) {
   const tableName = cli.flags.table;
+  const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
     console.error('--table is requred')
     cli.showHelp();
   }
 
-  return exportSchema(tableName, cli.flags.file, cli.flags.region)
+  return exportSchema(tableName, cli.flags.file, cli.flags.region, endpoint)
 }
 
 function exportAllSchemaCli(cli) {
   const region = cli.flags.region;
+  const endpoint = cli.flags.endpoint;
   return bluebird.map(listTables(region), tableName => {
     console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region);
+    return exportSchema(tableName, null, region, endpoint);
   }, { concurrency: 1 });
 }
 
-function exportSchema(tableName, file, region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function exportSchema(tableName, file, region, endpoint) {
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   return dynamoDb.describeTable({ TableName: tableName }).promise()
     .then(data => {
@@ -137,14 +147,19 @@ function importSchemaCli(cli) {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
   const region = cli.flags.region;
+  const endpoint = cli.flags.endpoint;
   const waitForActive = cli.flags.waitForActive;
+  const billingMode = cli.flags.billingMode;
+  const writeCapacityUnits = cli.flags.writeCapacity;
+  const readCapacityUnits = cli.flags.readCapacity;
+  const force = cli.flags.force;
 
   if (!file) {
     console.error('--file is requred')
     cli.showHelp();
   }
 
-  const dynamoDb = new AWS.DynamoDB({ region });
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   const doWaitForActive = () => promisePoller({
     taskFn: () => {
@@ -157,12 +172,48 @@ function importSchemaCli(cli) {
     retries: 60
   });
 
+  const doWaitForDeleted = () => promisePoller({
+    taskFn: () => {
+      return new Promise((resolve, reject) => {
+        dynamoDb.describeTable({ TableName: tableName }).promise()
+          .then(reject)
+          .catch(err => {
+            if (err.code === 'ResourceNotFoundException') {
+              resolve();
+            } else {
+              reject();
+            }
+          });
+      });
+    },
+    interval: 1000,
+    retries: 600
+  });
+
   fs.readFileAsync(file)
     .then(data => JSON.parse(data))
     .then(json => {
+      if (!force) {
+        return json;
+      }
+
+      return new Promise((resolve, reject) => {
+        dynamoDb.deleteTable({ TableName: tableName || json.TableName }).promise()
+          .catch(err => {
+            if (err.code === 'ResourceNotFoundException') {
+              resolve(json);
+            } else {
+              reject();
+            }
+          })
+          .then(doWaitForDeleted)
+          .then(() => resolve(json));
+      });
+    })
+    .then(json => {
       if (tableName) json.TableName = tableName;
 
-      filterTable(json);
+      filterTable(json, billingMode, writeCapacityUnits, readCapacityUnits);
 
       return dynamoDb.createTable(json).promise()
         .then(() => {
@@ -173,7 +224,7 @@ function importSchemaCli(cli) {
     });
 }
 
-function filterTable(table) {
+function filterTable(table, forcedBillingMode, forcedWriteCapacityUnits, forcedReadCapacityUnits) {
   delete table.TableStatus;
   delete table.CreationDateTime;
   delete table.ProvisionedThroughput.LastIncreaseDateTime;
@@ -186,6 +237,24 @@ function filterTable(table) {
   delete table.LatestStreamArn;
   delete table.TableId;
 
+  if (forcedBillingMode) {
+    table.BillingMode = forcedBillingMode;
+  } else if (table.BillingModeSummary) {
+    table.BillingMode = table.BillingModeSummary.BillingMode;
+  }
+  delete table.BillingModeSummary;
+
+  if (table.BillingMode !== 'PAY_PER_REQUEST') {
+    if (forcedReadCapacityUnits) {
+      table.ProvisionedThroughput.ReadCapacityUnits = forcedReadCapacityUnits;
+    }
+    if (forcedWriteCapacityUnits) {
+      table.ProvisionedThroughput.WriteCapacityUnits = forcedWriteCapacityUnits;
+    }
+  } else {
+    delete table.ProvisionedThroughput;
+  }
+
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
@@ -197,7 +266,21 @@ function filterTable(table) {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
-    delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+
+    if (table.BillingMode !== 'PAY_PER_REQUEST') {
+      delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+      delete index.ProvisionedThroughput.LastIncreaseDateTime;
+      delete index.ProvisionedThroughput.LastDecreaseDateTime;
+
+      if (forcedReadCapacityUnits) {
+        index.ProvisionedThroughput.ReadCapacityUnits = forcedReadCapacityUnits;
+      }
+      if (forcedWriteCapacityUnits) {
+        index.ProvisionedThroughput.WriteCapacityUnits = forcedWriteCapacityUnits;
+      }
+    } else {
+      delete index.ProvisionedThroughput;
+    }
   });
 }
 
@@ -205,6 +288,7 @@ function importDataCli(cli) {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
   const region = cli.flags.region;
+  const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
     console.error('--table is requred')
@@ -226,7 +310,7 @@ function importDataCli(cli) {
     }
   }
 
-  const dynamoDb = new AWS.DynamoDB({ region });
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   const readStream = fs.createReadStream(file);
   const parseStream = JSONStream.parse('*');
@@ -260,25 +344,26 @@ function importDataCli(cli) {
 
 function exportDataCli(cli) {
   const tableName = cli.flags.table;
+  const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
     console.error('--table is requred')
     cli.showHelp();
   }
 
-  return exportData(tableName, cli.flags.file, cli.flags.region);
+  return exportData(tableName, cli.flags.file, cli.flags.region, endpoint);
 }
 
 function exportAllDataCli(cli) {
   const region = cli.flags.region;
   return bluebird.map(listTables(region), tableName => {
     console.error(`Exporting ${tableName}`);
-    return exportData(tableName, null, region);
+    return exportData(tableName, null, region, endpoint);
   }, { concurrency: 1 });
 }
 
-function exportData(tableName, file, region) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function exportData(tableName, file, region, endpoint) {
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   const file2 = file || sanitizeFilename(tableName + '.dynamodata');
   const writeStream = fs.createWriteStream(file2);
@@ -313,15 +398,17 @@ function exportData(tableName, file, region) {
 
 function exportAllCli(cli) {
   const region = cli.flags.region;
+  const endpoint = cli.flags.endpoint;
   return bluebird.map(listTables(region), tableName => {
     console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region)
-      .then(() => exportData(tableName, null, region))
+    return exportSchema(tableName, null, region, endpoint)
+      .then(() => exportData(tableName, null, region, endpoint))
   }, { concurrency: 1 });
 }
 
 function wipeDataCli(cli) {
   const tableName = cli.flags.table;
+  const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
     console.error('--table is requred')
@@ -339,11 +426,11 @@ function wipeDataCli(cli) {
     }
   }
 
-  return wipeData(tableName, cli.flags.region, throughput);
+  return wipeData(tableName, cli.flags.region, endpoint, throughput);
 }
 
-function wipeData(tableName, region, throughput) {
-  const dynamoDb = new AWS.DynamoDB({ region });
+function wipeData(tableName, region, endpoint, throughput) {
+  const dynamoDb = new AWS.DynamoDB({ region, endpoint });
 
   let n = 0;
 
