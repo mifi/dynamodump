@@ -24,6 +24,12 @@ dynamodump wipe-data --throughput 5 --table your-table --region eu-west-1
 AWS_PROFILE=customprofile dynamodump list-tables
 ```
 
+### dynamodb-local support
+
+```
+dynamodump import-data --endpoint http://localhost:8000 --region=localhost --table=your-table --file=your-table.dynamodata
+```
+
 ## Backup all tables with structure/data to s3
 ```
 (mkdir backup && cd backup && dynamodump export-all --region eu-west-1) &&
