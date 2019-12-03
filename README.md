@@ -24,11 +24,10 @@ dynamodump wipe-data --throughput 5 --table your-table --region eu-west-1
 AWS_PROFILE=customprofile dynamodump list-tables
 ```
 
-### dynamodb-local support
+### DynamoDB Local
 
-```
-dynamodump import-data --endpoint http://localhost:8000 --region=localhost --table=your-table --file=your-table.dynamodata
-```
+See [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html).
+Use the flag `--endpoint`, e.g. `--endpoint http://localhost:8000`
 
 ## Backup all tables with structure/data to s3
 ```
