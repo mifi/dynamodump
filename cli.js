@@ -38,7 +38,7 @@ const cli = meow(`
       --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
       --max-retries Set AWS maxRetries
-      --ca-file Set certificate authority
+      --ca-file Set SSL certificate authority file
       --marshall Converts JSON to/from DynamoDB record on import/export
 
     Examples
@@ -70,11 +70,11 @@ if (cli.flags.profile) {
 }
 
 if (cli.flags.caFile) {
-
-  console.log('handling self signed cert: ' + cli.flags.caFile);
+  console.log('Using self signed cert', cli.flags.caFile);
+  const ca = fs.readFileSync(cli.flags.caFile);
 
   AWS.config.update({
-    httpOptions: { agent: new https.Agent({ ca: fs.readFileSync(cli.flags.caFile)}) }
+    httpOptions: { agent: new https.Agent({ ca }) }
   });
 }
 
