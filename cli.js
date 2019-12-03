@@ -11,6 +11,7 @@ const JSONStream = require('JSONStream');
 const streamToPromise = require('stream-to-promise');
 const debug = require('debug')('dynamodump');
 const _ = require('lodash');
+const https = require('https');
 
 bluebird.promisifyAll(fs);
 
@@ -37,6 +38,8 @@ const cli = meow(`
       --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
       --max-retries Set AWS maxRetries
+      --ca-file Set SSL certificate authority file
+      --marshall Converts JSON to/from DynamoDB record on import/export
       --endpoint Endpoint URL for DynamoDB Local
 
     Examples
@@ -65,6 +68,15 @@ const method = methods[cli.input[0]] || cli.showHelp();
 
 if (cli.flags.profile) {
   AWS.config.credentials = new AWS.SharedIniFileCredentials({profile: cli.flags.profile});
+}
+
+if (cli.flags.caFile) {
+  console.log('Using self signed cert', cli.flags.caFile);
+  const ca = fs.readFileSync(cli.flags.caFile);
+
+  AWS.config.update({
+    httpOptions: { agent: new https.Agent({ ca }) }
+  });
 }
 
 bluebird.resolve(method.call(undefined, cli))
@@ -215,11 +227,11 @@ function importDataCli(cli) {
   const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
-    console.error('--table is requred')
+    console.error('--table is required')
     cli.showHelp();
   }
   if (!file) {
-    console.error('--file is requred')
+    console.error('--file is required')
     cli.showHelp();
   }
   let throughput = 1;
@@ -248,6 +260,10 @@ function importDataCli(cli) {
   readStream.pipe(parseStream)
     .on('data', data => {
       debug('data');
+
+      if (cli.flags.marshall) {
+        data = AWS.DynamoDB.Converter.marshall(data);
+      }
 
       n++;
       logThrottled();
@@ -302,7 +318,12 @@ function exportData(tableName, file, region, endpoint) {
   const scanPage = () => {
     return bluebird.resolve(dynamoDb.scan(params).promise())
       .then(data => {
-        data.Items.forEach(item => stringify.write(item));
+        data.Items.forEach(item => {
+          if (cli.flags.marshall) {
+            item = AWS.DynamoDB.Converter.unmarshall(item);
+          }
+          return stringify.write(item)
+        });
 
         n += data.Items.length;
         console.error('Exported', n, 'items');
