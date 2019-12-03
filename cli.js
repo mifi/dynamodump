@@ -37,7 +37,7 @@ const cli = meow(`
       --profile utilize named profile from .aws/credentials file
       --throughput How many rows to delete in parallel (wipe-data)
       --max-retries Set AWS maxRetries
-      --endpoint Endpoint for dynamodb-local
+      --endpoint Endpoint URL for DynamoDB Local
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -84,7 +84,7 @@ function listTablesCli(cli) {
 
 function listTables(region, endpoint) {
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if (endpoint) dynamoDb.endpoint = endpoint;
 
   const params = {};
 
@@ -127,7 +127,7 @@ function exportAllSchemaCli(cli) {
 
 function exportSchema(tableName, file, region, endpoint) {
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if (endpoint) dynamoDb.endpoint = endpoint;
 
   return dynamoDb.describeTable({ TableName: tableName }).promise()
     .then(data => {
@@ -151,7 +151,7 @@ function importSchemaCli(cli) {
   }
 
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if (endpoint) dynamoDb.endpoint = endpoint;
 
   const doWaitForActive = () => promisePoller({
     taskFn: () => {
@@ -235,7 +235,7 @@ function importDataCli(cli) {
   }
 
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if (endpoint) dynamoDb.endpoint = endpoint;
 
   const readStream = fs.createReadStream(file);
   const parseStream = JSONStream.parse('*');
@@ -289,7 +289,7 @@ function exportAllDataCli(cli) {
 
 function exportData(tableName, file, region, endpoint) {
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if (endpoint) dynamoDb.endpoint = endpoint;
 
   const file2 = file || sanitizeFilename(tableName + '.dynamodata');
   const writeStream = fs.createWriteStream(file2);
@@ -356,7 +356,8 @@ function wipeDataCli(cli) {
 
 function wipeData(tableName, region, endpoint, throughput) {
   const dynamoDb = new AWS.DynamoDB({ region });
-  if(endpoint) dynamoDb.endpoint = endpoint;
+  if 
+      (endpoint) dynamoDb.endpoint = endpoint;
 
   let n = 0;
 
