@@ -205,10 +205,33 @@ function filterTable(table) {
   delete table.LatestStreamArn;
   delete table.TableId;
 
+  if (table.BillingModeSummary) {
+    table.BillingMode = table.BillingModeSummary.BillingMode;
+  }
+  delete table.BillingModeSummary;
+
+  // See https://github.com/mifi/dynamodump/pull/12/files
+  if (table.BillingMode === 'PAY_PER_REQUEST') {
+    delete table.ProvisionedThroughput;
+  }
+
+  function handleIndex(index) {
+    // See https://github.com/mifi/dynamodump/pull/12/files
+    if (table.BillingMode === 'PAY_PER_REQUEST') {
+      delete index.ProvisionedThroughput;
+    } else {
+      delete index.ProvisionedThroughput.LastIncreaseDateTime;
+      delete index.ProvisionedThroughput.LastDecreaseDateTime;
+      delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+    }
+  }
+
   (table.LocalSecondaryIndexes || []).forEach(index => {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
+
+    handleIndex(index);
   });
 
   (table.GlobalSecondaryIndexes || []).forEach(index => {
@@ -216,7 +239,8 @@ function filterTable(table) {
     delete index.IndexSizeBytes;
     delete index.ItemCount;
     delete index.IndexArn;
-    delete index.ProvisionedThroughput.NumberOfDecreasesToday;
+
+    handleIndex(index);
   });
 }
 
