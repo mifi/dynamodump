@@ -41,6 +41,8 @@ const cli = meow(`
       --ca-file Set SSL certificate authority file
       --marshall Converts JSON to/from DynamoDB record on import/export
       --endpoint Endpoint URL for DynamoDB Local
+      --quiet Quiet mode, disable progress logs
+
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -249,6 +251,7 @@ function importDataCli(cli) {
   const file = cli.flags.file;
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const quiet = cli.flags.quiet;
 
   if (!tableName) {
     console.error('--table is required')
@@ -278,7 +281,11 @@ function importDataCli(cli) {
 
   let n = 0;
 
-  const logProgress = () => console.error('Imported', n, 'items');
+  const logProgress = () => {
+    if(!quiet) {
+      console.error('Imported', n, 'items');
+    }
+  };
   const logThrottled = _.throttle(logProgress, 5000, { trailing: false });
 
   readStream.pipe(parseStream)
@@ -321,13 +328,14 @@ function exportDataCli(cli) {
 function exportAllDataCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const quiet = cli.flags.quiet;
   return bluebird.map(listTables(region, endpoint), tableName => {
     console.error(`Exporting ${tableName}`);
     return exportData(tableName, null, region, endpoint);
   }, { concurrency: 1 });
 }
 
-function exportData(tableName, file, region, endpoint) {
+function exportData(tableName, file, region, quiet, endpoint) {
   const dynamoDb = new AWS.DynamoDB({ region });
   if (endpoint) dynamoDb.endpoint = endpoint;
 
@@ -349,8 +357,10 @@ function exportData(tableName, file, region, endpoint) {
           return stringify.write(item)
         });
 
-        n += data.Items.length;
-        console.error('Exported', n, 'items');
+        if(!quiet) {
+          n += data.Items.length;
+          console.error('Exported', n, 'items');
+        }
 
         if (data.LastEvaluatedKey !== undefined) {
           params.ExclusiveStartKey = data.LastEvaluatedKey;
@@ -396,10 +406,10 @@ function wipeDataCli(cli) {
     }
   }
 
-  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, throughput);
+  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, cli.flags.quiet, throughput);
 }
 
-function wipeData(tableName, region, endpoint, throughput) {
+function wipeData(tableName, region, endpoint, quiet, throughput,) {
   const dynamoDb = new AWS.DynamoDB({ region });
   if 
       (endpoint) dynamoDb.endpoint = endpoint;
@@ -421,8 +431,11 @@ function wipeData(tableName, region, endpoint, throughput) {
           };
           return dynamoDb.deleteItem(delParams).promise();
         }).then(() => {
-          n += data.Items.length;
-          console.error('Wiped', n, 'items');
+
+          if(!quiet) {
+            n += data.Items.length;
+            console.error('Wiped', n, 'items');
+          }
 
           if (data.LastEvaluatedKey !== undefined) {
             params.ExclusiveStartKey = data.LastEvaluatedKey;
