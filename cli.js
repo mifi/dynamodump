@@ -409,7 +409,7 @@ function wipeDataCli(cli) {
   return wipeData(tableName, cli.flags.region, cli.flags.endpoint, cli.flags.quiet, throughput);
 }
 
-function wipeData(tableName, region, endpoint, quiet, throughput,) {
+function wipeData(tableName, region, endpoint, quiet, throughput) {
   const dynamoDb = new AWS.DynamoDB({ region });
   if 
       (endpoint) dynamoDb.endpoint = endpoint;
