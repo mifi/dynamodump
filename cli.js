@@ -12,6 +12,8 @@ const streamToPromise = require('stream-to-promise');
 const debug = require('debug')('dynamodump');
 const _ = require('lodash');
 const https = require('https');
+const process = require('process');
+const { runMain } = require('module');
 
 bluebird.promisifyAll(fs);
 
@@ -41,6 +43,7 @@ const cli = meow(`
       --ca-file Set SSL certificate authority file
       --marshall Converts JSON to/from DynamoDB record on import/export
       --endpoint Endpoint URL for DynamoDB Local
+      --dry-run Simulate command 
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -119,10 +122,16 @@ function listTables(region, endpoint) {
 
 function exportSchemaCli(cli) {
   const tableName = cli.flags.table;
+  const dryRun = cli.flags.dryRun;
 
   if (!tableName) {
     console.error('--table is requred')
     cli.showHelp();
+  }
+
+  if(dryRun) {
+    console.log('Exporting schema for table', tableName);
+    process.exit(0)
   }
 
   return exportSchema(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint)
@@ -131,9 +140,12 @@ function exportSchemaCli(cli) {
 function exportAllSchemaCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const dryRun = cli.flags.dryRun;
   return bluebird.map(listTables(region, endpoint), tableName => {
-    console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region, endpoint);
+    console.error(`Exporting schema for table ${tableName}`);
+    if(!dryRun) {
+      return exportSchema(tableName, null, region, endpoint);
+    }
   }, { concurrency: 1 });
 }
 
@@ -156,10 +168,15 @@ function importSchemaCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
   const waitForActive = cli.flags.waitForActive;
+  const dryRun = cli.flags.dryRun;
 
   if (!file) {
     console.error('--file is requred')
     cli.showHelp();
+  }
+  if(dryRun) {
+    console.log('Importing schema for table', tableName, 'from file', file);
+    process.exit(0)
   }
 
   const dynamoDb = new AWS.DynamoDB({ region });
@@ -249,6 +266,7 @@ function importDataCli(cli) {
   const file = cli.flags.file;
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const dryRun = cli.flags.dryRun;
 
   if (!tableName) {
     console.error('--table is required')
@@ -257,6 +275,10 @@ function importDataCli(cli) {
   if (!file) {
     console.error('--file is required')
     cli.showHelp();
+  }
+  if(dryRun) {
+    console.log('Importing data for table', tableName, 'from file', file);
+    process.exit(0)
   }
   let throughput = 1;
 
@@ -309,10 +331,15 @@ function importDataCli(cli) {
 
 function exportDataCli(cli) {
   const tableName = cli.flags.table;
+  const dryRun = cli.flags.dryRun;
 
   if (!tableName) {
     console.error('--table is requred')
     cli.showHelp();
+  }
+  if(dryRun) {
+    console.log('Exporting data for table', tableName);
+    process.exit(0)
   }
 
   return exportData(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint);
@@ -321,9 +348,12 @@ function exportDataCli(cli) {
 function exportAllDataCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const dryRun = cli.flags.dryRun;
   return bluebird.map(listTables(region, endpoint), tableName => {
-    console.error(`Exporting ${tableName}`);
-    return exportData(tableName, null, region, endpoint);
+    console.error(`Exporting data for table ${tableName}`);
+    if(!dryRun) {
+      return exportData(tableName, null, region, endpoint);
+    }
   }, { concurrency: 1 });
 }
 
@@ -370,19 +400,27 @@ function exportData(tableName, file, region, endpoint) {
 function exportAllCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
+  const dryRun = cli.flags.dryRun;
   return bluebird.map(listTables(region, endpoint), tableName => {
-    console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region, endpoint)
-      .then(() => exportData(tableName, null, region, endpoint))
+    console.error(`Exporting schema and data for table ${tableName}`);
+    if(!dryRun) {
+      return exportSchema(tableName, null, region, endpoint)
+        .then(() => exportData(tableName, null, region, endpoint))
+    }
   }, { concurrency: 1 });
 }
 
 function wipeDataCli(cli) {
   const tableName = cli.flags.table;
+  const dryRun = cli.flags.dryRun;
 
   if (!tableName) {
-    console.error('--table is requred')
+    console.error('--table is required')
     cli.showHelp();
+  }
+  if(dryRun) {
+    console.log('Wiping data for table', tableName);
+    process.exit(0)
   }
 
   let throughput = 10;
