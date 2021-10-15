@@ -13,7 +13,6 @@ const debug = require('debug')('dynamodump');
 const _ = require('lodash');
 const https = require('https');
 const process = require('process');
-const { runMain } = require('module');
 
 bluebird.promisifyAll(fs);
 
