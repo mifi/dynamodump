@@ -42,7 +42,7 @@ const cli = meow(`
       --ca-file Set SSL certificate authority file
       --marshall Converts JSON to/from DynamoDB record on import/export
       --endpoint Endpoint URL for DynamoDB Local
-      --dry-run Simulate command 
+      --dry-run Report the actions that would be made without actually runnning them.
 
     Examples
       dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
