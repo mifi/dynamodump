@@ -41,7 +41,6 @@ const cli = meow(`
       --ca-file Set SSL certificate authority file
       --marshall Converts JSON to/from DynamoDB record on import/export
       --endpoint Endpoint URL for DynamoDB Local
-      --quiet Quiet mode, disable progress logs
 
 
     Examples
@@ -251,7 +250,6 @@ function importDataCli(cli) {
   const file = cli.flags.file;
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
-  const quiet = cli.flags.quiet;
 
   if (!tableName) {
     console.error('--table is required')
@@ -282,9 +280,7 @@ function importDataCli(cli) {
   let n = 0;
 
   const logProgress = () => {
-    if(!quiet) {
-      console.error('Imported', n, 'items');
-    }
+    quietLogging('Imported' + n + 'items')
   };
   const logThrottled = _.throttle(logProgress, 5000, { trailing: false });
 
@@ -325,17 +321,27 @@ function exportDataCli(cli) {
   return exportData(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint);
 }
 
+function randomInt(low, high) {
+  return Math.floor(Math.random() * (high - low + 1) + low)
+}
+
+function quietLogging(message) {
+  // read 10 from env variable
+  if(randomInt(0,10) === 0){
+    console.error(message)
+  }
+}
+
 function exportAllDataCli(cli) {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
-  const quiet = cli.flags.quiet;
   return bluebird.map(listTables(region, endpoint), tableName => {
     console.error(`Exporting ${tableName}`);
     return exportData(tableName, null, region, endpoint);
   }, { concurrency: 1 });
 }
 
-function exportData(tableName, file, region, quiet, endpoint) {
+function exportData(tableName, file, region, endpoint) {
   const dynamoDb = new AWS.DynamoDB({ region });
   if (endpoint) dynamoDb.endpoint = endpoint;
 
@@ -357,10 +363,9 @@ function exportData(tableName, file, region, quiet, endpoint) {
           return stringify.write(item)
         });
 
-        if(!quiet) {
-          n += data.Items.length;
-          console.error('Exported', n, 'items');
-        }
+        n += data.Items.length;
+        quietLogging('Exported ' + n + ' items');
+
 
         if (data.LastEvaluatedKey !== undefined) {
           params.ExclusiveStartKey = data.LastEvaluatedKey;
@@ -406,10 +411,10 @@ function wipeDataCli(cli) {
     }
   }
 
-  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, cli.flags.quiet, throughput);
+  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, throughput);
 }
 
-function wipeData(tableName, region, endpoint, quiet, throughput,) {
+function wipeData(tableName, region, endpoint, throughput,) {
   const dynamoDb = new AWS.DynamoDB({ region });
   if 
       (endpoint) dynamoDb.endpoint = endpoint;
@@ -431,12 +436,10 @@ function wipeData(tableName, region, endpoint, quiet, throughput,) {
           };
           return dynamoDb.deleteItem(delParams).promise();
         }).then(() => {
-
-          if(!quiet) {
-            n += data.Items.length;
-            console.error('Wiped', n, 'items');
-          }
-
+   
+          n += data.Items.length;
+          quietLogging('Wiped' + n + 'items');
+          
           if (data.LastEvaluatedKey !== undefined) {
             params.ExclusiveStartKey = data.LastEvaluatedKey;
             return scanPage(keyFields);
