@@ -47,6 +47,7 @@ const cli = meow(`
     --endpoint Endpoint URL for DynamoDB Local
     --ca-file Set SSL certificate authority file
     --stack-trace Log stack trace upon error
+    --dry-run Report the actions that would be made without actually runnning them.
 
   Examples
     dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -63,7 +64,10 @@ const cli = meow(`
     },
     waitForActive: {
       type: 'boolean',
-    }
+    },
+    dryRun: {
+      type: 'boolean',
+    },
   }
 });
 
@@ -82,17 +86,21 @@ if (cli.flags.caFile) {
   });
 }
 
-async function listTablesCli() {
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
+const { dryRun, table: tableName, region, endpoint } = cli.flags;
 
-  const tables = await listTables(region, endpoint);
+function createDynamoDb() {
+  const dynamoDbParams = { region };
+  if (endpoint) dynamoDbParams.endpoint = endpoint;
+  return new AWS.DynamoDB(dynamoDbParams);
+}
+
+async function listTablesCli() {
+  const tables = await listTables();
   console.log(tables.join(' '));
 }
 
-function listTables(region, endpoint) {
-  const dynamoDb = new AWS.DynamoDB({ region });
-  if (endpoint) dynamoDb.endpoint = endpoint;
+function listTables() {
+  const dynamoDb = createDynamoDb();
 
   const params = {};
 
@@ -112,29 +120,27 @@ function listTables(region, endpoint) {
 }
 
 async function exportSchemaCli() {
-  const tableName = cli.flags.table;
+  console.log('Exporting schema for table', tableName);
+  if (dryRun) return;
 
   if (!tableName) {
     console.error('--table is requred')
     cli.showHelp();
   }
 
-  return exportSchema(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint)
+  return exportSchema(tableName, cli.flags.file)
 }
 
 async function exportAllSchemaCli() {
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
-
-  return pMap(await listTables(region, endpoint), tableName => {
-    console.error(`Exporting ${tableName}`);
-    return exportSchema(tableName, null, region, endpoint);
+  return pMap(await listTables(), async (tableName) => {
+    console.error('Exporting schema for table', tableName);
+    if (dryRun) return;
+    await exportSchema(tableName, null);
   }, { concurrency: 1 });
 }
 
-async function exportSchema(tableName, file, region, endpoint) {
-  const dynamoDb = new AWS.DynamoDB({ region });
-  if (endpoint) dynamoDb.endpoint = endpoint;
+async function exportSchema(tableName, file) {
+  const dynamoDb = createDynamoDb();
 
   const data = await dynamoDb.describeTable({ TableName: tableName }).promise();
   const table = data.Table;
@@ -144,10 +150,7 @@ async function exportSchema(tableName, file, region, endpoint) {
 }
 
 async function importSchemaCli() {
-  const tableName = cli.flags.table;
   const file = cli.flags.file;
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
   const waitForActive = cli.flags.waitForActive;
 
   if (!file) {
@@ -155,8 +158,9 @@ async function importSchemaCli() {
     cli.showHelp();
   }
 
-  const dynamoDb = new AWS.DynamoDB({ region });
-  if (endpoint) dynamoDb.endpoint = endpoint;
+  console.log('Importing schema for table', tableName, 'from file', file);
+
+  const dynamoDb = createDynamoDb();
 
   async function doWaitForActive() {
     const retries = 60;
@@ -174,6 +178,7 @@ async function importSchemaCli() {
 
   filterTable(data);
 
+  if (dryRun) return;
   await dynamoDb.createTable(data).promise()
   if (waitForActive) return doWaitForActive();
 }
@@ -241,10 +246,7 @@ function getThroughput(defaultThroughput) {
 }
 
 async function importDataCli() {
-  const tableName = cli.flags.table;
   const file = cli.flags.file;
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
 
   if (!tableName) {
     console.error('--table is required')
@@ -257,8 +259,10 @@ async function importDataCli() {
 
   const throughput = getThroughput(1);
 
-  const dynamoDb = new AWS.DynamoDB({ region });
-  if (endpoint) dynamoDb.endpoint = endpoint;
+  const dynamoDb = createDynamoDb();
+
+  console.log('Importing data for table', tableName, 'from file', file);
+  if (dryRun) return;
 
   const readStream = createReadStream(file);
   const parseStream = JSONStream.parse('*');
@@ -298,29 +302,27 @@ async function importDataCli() {
 }
 
 async function exportDataCli() {
-  const tableName = cli.flags.table;
-
   if (!tableName) {
-    console.error('--table is requred')
+    console.error('--table is required')
     cli.showHelp();
   }
 
-  return exportData(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint);
+  console.log('Exporting data for table', tableName);
+  if (dryRun) return;
+
+  return exportData(tableName, cli.flags.file);
 }
 
 async function exportAllDataCli() {
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
-
-  return pMap(await listTables(region, endpoint), tableName => {
-    console.error(`Exporting ${tableName}`);
-    return exportData(tableName, null, region, endpoint);
+  return pMap(await listTables(), async (tableName) => {
+    console.error('Exporting data for table', tableName);
+    if (dryRun) return;
+    await exportData(tableName, null);
   }, { concurrency: 1 });
 }
 
-async function exportData(tableName, file, region, endpoint) {
-  const dynamoDb = new AWS.DynamoDB({ region });
-  if (endpoint) dynamoDb.endpoint = endpoint;
+async function exportData(tableName, file) {
+  const dynamoDb = createDynamoDb();
 
   const file2 = file || sanitizeFilename(tableName + '.dynamodata');
   const writeStream = createWriteStream(file2);
@@ -356,31 +358,28 @@ async function exportData(tableName, file, region, endpoint) {
 }
 
 async function exportAllCli() {
-  const region = cli.flags.region;
-  const endpoint = cli.flags.endpoint;
-
-  return pMap(await listTables(region, endpoint), async (tableName) => {
-    console.error(`Exporting ${tableName}`);
-    await exportSchema(tableName, null, region, endpoint);
-    await exportData(tableName, null, region, endpoint);
+  return pMap(await listTables(), async (tableName) => {
+    console.error('Exporting schema and data for table', tableName);
+    if (dryRun) return;
+    await exportSchema(tableName, null);
+    await exportData(tableName, null);
   }, { concurrency: 1 });
 }
 
 async function wipeDataCli() {
-  const tableName = cli.flags.table;
-
   if (!tableName) {
-    console.error('--table is requred')
+    console.error('--table is required')
     cli.showHelp();
   }
 
-  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, getThroughput(10));
+  console.log('Wiping data for table', tableName);
+  if (dryRun) return;
+
+  return wipeData(tableName, getThroughput(10));
 }
 
-async function wipeData(tableName, region, endpoint, throughput) {
-  const dynamoDbParams = { region };
-  if (endpoint) dynamoDbParams.endpoint = endpoint;
-  const dynamoDb = new AWS.DynamoDB(dynamoDbParams);
+async function wipeData(tableName, throughput) {
+  const dynamoDb = createDynamoDb();
 
   let n = 0;
 
