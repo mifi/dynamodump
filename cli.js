@@ -17,7 +17,6 @@ import https from 'https';
 
 const pipeline = promisify(pipelineCb);
 
-
 const debug = Debug('dynamodump');
 
 const cli = meow(`
@@ -48,6 +47,7 @@ const cli = meow(`
     --ca-file Set SSL certificate authority file
     --stack-trace Log stack trace upon error
     --dry-run Report the actions that would be made without actually runnning them.
+    --log-level Set log level: debug, info, warn, error
 
   Examples
     dynamodump export-schema --region=eu-west-1 --table=your-table --file=your-schema-dump
@@ -71,6 +71,31 @@ const cli = meow(`
   }
 });
 
+const logger = (() => {
+  const levels = [
+    'debug',
+    'info',
+    'warn',
+    'error',
+  ];
+  const currentLogLevelIndex = levels.indexOf(cli.flags.logLevel || 'info');
+
+  const log = (level, ...args) => {
+    if (levels.indexOf(level) < currentLogLevelIndex) return;
+    if (cli.flags.quiet) return;
+    if (level === 'error') return console.error(...args);
+    if (level === 'warn') return console.warn(...args);
+    console.log(...args);
+  }
+  return {
+    error: (...args) => log('error', ...args),
+    info: (...args) => log('info', ...args),
+    warn: (...args) => log('warn', ...args),
+    debug: (...args) => log('debug', ...args),
+  }
+})();
+
+
 if (cli.flags.maxRetries != null) AWS.config.maxRetries = cli.flags.maxRetries;
 
 if (cli.flags.profile) {
@@ -78,7 +103,7 @@ if (cli.flags.profile) {
 }
 
 if (cli.flags.caFile) {
-  console.log('Using self signed cert', cli.flags.caFile);
+  logger.info('Using self signed cert', cli.flags.caFile);
   const ca = await readFile(cli.flags.caFile);
 
   AWS.config.update({
@@ -88,6 +113,7 @@ if (cli.flags.caFile) {
 
 const { dryRun, table: tableName, region, endpoint } = cli.flags;
 
+
 function createDynamoDb() {
   const dynamoDbParams = { region };
   if (endpoint) dynamoDbParams.endpoint = endpoint;
@@ -96,7 +122,7 @@ function createDynamoDb() {
 
 async function listTablesCli() {
   const tables = await listTables();
-  console.log(tables.join(' '));
+  logger.info(tables.join(' '));
 }
 
 function listTables() {
@@ -120,11 +146,11 @@ function listTables() {
 }
 
 async function exportSchemaCli() {
-  console.log('Exporting schema for table', tableName);
+  logger.info('Exporting schema for table', tableName);
   if (dryRun) return;
 
   if (!tableName) {
-    console.error('--table is requred')
+    logger.error('--table is requred')
     cli.showHelp();
   }
 
@@ -133,7 +159,7 @@ async function exportSchemaCli() {
 
 async function exportAllSchemaCli() {
   return pMap(await listTables(), async (tableName) => {
-    console.error('Exporting schema for table', tableName);
+    logger.info('Exporting schema for table', tableName);
     if (dryRun) return;
     await exportSchema(tableName, null);
   }, { concurrency: 1 });
@@ -154,11 +180,11 @@ async function importSchemaCli() {
   const waitForActive = cli.flags.waitForActive;
 
   if (!file) {
-    console.error('--file is requred')
+    logger.error('--file is requred')
     cli.showHelp();
   }
 
-  console.log('Importing schema for table', tableName, 'from file', file);
+  logger.info('Importing schema for table', tableName, 'from file', file);
 
   const dynamoDb = createDynamoDb();
 
@@ -240,7 +266,7 @@ function getThroughput(defaultThroughput) {
   if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
     return cli.flags.throughput;
   } else {
-    console.error('--throughput must be a positive integer');
+    logger.error('--throughput must be a positive integer');
     cli.showHelp();
   }
 }
@@ -249,11 +275,11 @@ async function importDataCli() {
   const file = cli.flags.file;
 
   if (!tableName) {
-    console.error('--table is required')
+    logger.error('--table is required')
     cli.showHelp();
   }
   if (!file) {
-    console.error('--file is required')
+    logger.error('--file is required')
     cli.showHelp();
   }
 
@@ -261,7 +287,7 @@ async function importDataCli() {
 
   const dynamoDb = createDynamoDb();
 
-  console.log('Importing data for table', tableName, 'from file', file);
+  logger.info('Importing data for table', tableName, 'from file', file);
   if (dryRun) return;
 
   const readStream = createReadStream(file);
@@ -269,7 +295,7 @@ async function importDataCli() {
 
   let n = 0;
 
-  const logProgress = () => console.error('Imported', n, 'items');
+  const logProgress = () => logger.debug('Imported', n, 'items');
   const logThrottled = throttle(logProgress, 5000, { trailing: false });
 
   readStream.pipe(parseStream)
@@ -303,11 +329,11 @@ async function importDataCli() {
 
 async function exportDataCli() {
   if (!tableName) {
-    console.error('--table is required')
+    logger.error('--table is required')
     cli.showHelp();
   }
 
-  console.log('Exporting data for table', tableName);
+  logger.info('Exporting data for table', tableName);
   if (dryRun) return;
 
   return exportData(tableName, cli.flags.file);
@@ -315,7 +341,7 @@ async function exportDataCli() {
 
 async function exportAllDataCli() {
   return pMap(await listTables(), async (tableName) => {
-    console.error('Exporting data for table', tableName);
+    logger.info('Exporting data for table', tableName);
     if (dryRun) return;
     await exportData(tableName, null);
   }, { concurrency: 1 });
@@ -343,7 +369,7 @@ async function exportData(tableName, file) {
     });
 
     n += data.Items.length;
-    console.error('Exported', n, 'items');
+    logger.debug('Exported', n, 'items');
 
     if (data.LastEvaluatedKey !== undefined) {
       params.ExclusiveStartKey = data.LastEvaluatedKey;
@@ -359,7 +385,7 @@ async function exportData(tableName, file) {
 
 async function exportAllCli() {
   return pMap(await listTables(), async (tableName) => {
-    console.error('Exporting schema and data for table', tableName);
+    logger.info('Exporting schema and data for table', tableName);
     if (dryRun) return;
     await exportSchema(tableName, null);
     await exportData(tableName, null);
@@ -368,11 +394,11 @@ async function exportAllCli() {
 
 async function wipeDataCli() {
   if (!tableName) {
-    console.error('--table is required')
+    logger.error('--table is required')
     cli.showHelp();
   }
 
-  console.log('Wiping data for table', tableName);
+  logger.info('Wiping data for table', tableName);
   if (dryRun) return;
 
   return wipeData(tableName, getThroughput(10));
@@ -400,7 +426,7 @@ async function wipeData(tableName, throughput) {
     }, { concurrency: 10 })
 
     n += data.Items.length;
-    console.error('Wiped', n, 'items');
+    logger.debug('Wiped', n, 'items');
 
     if (data.LastEvaluatedKey !== undefined) {
       params.ExclusiveStartKey = data.LastEvaluatedKey;
@@ -439,9 +465,9 @@ try {
   await method()
 } catch (err) {
   if (cli.flags.stackTrace) {
-    console.error('Error:', err);
+    logger.error('Error:', err);
   } else {
-    console.error('Error:', err.message);
+    logger.error('Error:', err.message);
   }
   process.exitCode = 1;
 }
