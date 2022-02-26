@@ -240,7 +240,7 @@ function filterTable(table) {
     // See https://github.com/mifi/dynamodump/pull/12/files
     if (table.BillingMode === 'PAY_PER_REQUEST') {
       delete index.ProvisionedThroughput;
-    } else {
+    } else if (index.ProvisionedThroughput) { // https://github.com/mifi/dynamodump/issues/26
       delete index.ProvisionedThroughput.LastIncreaseDateTime;
       delete index.ProvisionedThroughput.LastDecreaseDateTime;
       delete index.ProvisionedThroughput.NumberOfDecreasesToday;
