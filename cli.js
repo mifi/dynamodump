@@ -122,6 +122,10 @@ function createDynamoDb() {
 
 async function listTablesCli() {
   const tables = await listTables();
+  if (tables.length === 0) {
+    logger.info('No tables found');
+    return;
+  }
   logger.info(tables.join(' '));
 }
 
