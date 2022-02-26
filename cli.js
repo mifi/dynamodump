@@ -60,11 +60,14 @@ const cli = meow(`
   flags: {
     stackTrace: {
       type: 'boolean',
+    },
+    waitForActive: {
+      type: 'boolean',
     }
   }
 });
 
-if (cli.flags.maxRetries !== undefined) AWS.config.maxRetries = cli.flags.maxRetries;
+if (cli.flags.maxRetries != null) AWS.config.maxRetries = cli.flags.maxRetries;
 
 if (cli.flags.profile) {
   AWS.config.credentials = new AWS.SharedIniFileCredentials({profile: cli.flags.profile});
@@ -79,7 +82,7 @@ if (cli.flags.caFile) {
   });
 }
 
-async function listTablesCli(cli) {
+async function listTablesCli() {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
 
@@ -108,7 +111,7 @@ function listTables(region, endpoint) {
   return listTablesPaged();
 }
 
-async function exportSchemaCli(cli) {
+async function exportSchemaCli() {
   const tableName = cli.flags.table;
 
   if (!tableName) {
@@ -119,7 +122,7 @@ async function exportSchemaCli(cli) {
   return exportSchema(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint)
 }
 
-async function exportAllSchemaCli(cli) {
+async function exportAllSchemaCli() {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
 
@@ -140,7 +143,7 @@ async function exportSchema(tableName, file, region, endpoint) {
   return writeFile(file2, JSON.stringify(table, null, 2))
 }
 
-async function importSchemaCli(cli) {
+async function importSchemaCli() {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
   const region = cli.flags.region;
@@ -172,7 +175,7 @@ async function importSchemaCli(cli) {
   filterTable(data);
 
   await dynamoDb.createTable(data).promise()
-  if (waitForActive !== undefined) return doWaitForActive();
+  if (waitForActive) return doWaitForActive();
 }
 
 function filterTable(table) {
@@ -237,7 +240,7 @@ function getThroughput(defaultThroughput) {
   }
 }
 
-async function importDataCli(cli) {
+async function importDataCli() {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
   const region = cli.flags.region;
@@ -294,7 +297,7 @@ async function importDataCli(cli) {
   })
 }
 
-async function exportDataCli(cli) {
+async function exportDataCli() {
   const tableName = cli.flags.table;
 
   if (!tableName) {
@@ -305,7 +308,7 @@ async function exportDataCli(cli) {
   return exportData(tableName, cli.flags.file, cli.flags.region, cli.flags.endpoint);
 }
 
-async function exportAllDataCli(cli) {
+async function exportAllDataCli() {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
 
@@ -352,7 +355,7 @@ async function exportData(tableName, file, region, endpoint) {
   await pipeline(stringify, writeStream);
 }
 
-async function exportAllCli(cli) {
+async function exportAllCli() {
   const region = cli.flags.region;
   const endpoint = cli.flags.endpoint;
 
@@ -363,7 +366,7 @@ async function exportAllCli(cli) {
   }, { concurrency: 1 });
 }
 
-async function wipeDataCli(cli) {
+async function wipeDataCli() {
   const tableName = cli.flags.table;
 
   if (!tableName) {
@@ -434,7 +437,7 @@ const methods = {
 const method = methods[cli.input[0]] || cli.showHelp();
 
 try {
-  await method(cli)
+  await method()
 } catch (err) {
   if (cli.flags.stackTrace) {
     console.error('Error:', err);
