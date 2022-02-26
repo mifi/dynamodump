@@ -4,7 +4,9 @@
   "description": "Node cli for exporting/importing schema, exporting/importing/wiping data of DynamoDB tables",
   "main": "cli.js",
   "type": "module",
-  "scripts": {},
+  "scripts": {
+    "test": "exit 0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mifi/dynamodump.git"
@@ -26,7 +28,6 @@
       "url": "http://github.com/ianpogi5"
     }
   ],
-  "test": "exit 0",
   "license": "MIT",
   "files": [
     "cli.js"
