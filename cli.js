@@ -227,6 +227,16 @@ function filterTable(table) {
   });
 }
 
+function getThroughput(defaultThroughput) {
+  if (cli.flags.throughput == null) return defaultThroughput;
+  if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
+    return cli.flags.throughput;
+  } else {
+    console.error('--throughput must be a positive integer');
+    cli.showHelp();
+  }
+}
+
 async function importDataCli(cli) {
   const tableName = cli.flags.table;
   const file = cli.flags.file;
@@ -241,17 +251,8 @@ async function importDataCli(cli) {
     console.error('--file is required')
     cli.showHelp();
   }
-  let throughput = 1;
 
-  if (cli.flags.throughput !== undefined) {
-    if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
-      throughput = cli.flags.throughput;
-    } else {
-      console.error('--throughput must be a positive integer');
-      cli.showHelp();
-      return;
-    }
-  }
+  const throughput = getThroughput(1);
 
   const dynamoDb = new AWS.DynamoDB({ region });
   if (endpoint) dynamoDb.endpoint = endpoint;
@@ -370,18 +371,7 @@ async function wipeDataCli(cli) {
     cli.showHelp();
   }
 
-  let throughput = 10;
-
-  if (cli.flags.throughput !== undefined) {
-    if (Number.isInteger(cli.flags.throughput) && cli.flags.throughput > 0) {
-      throughput = cli.flags.throughput;
-    } else {
-      console.error('--throughput must be a positive integer');
-      cli.showHelp();
-    }
-  }
-
-  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, throughput);
+  return wipeData(tableName, cli.flags.region, cli.flags.endpoint, getThroughput(10));
 }
 
 async function wipeData(tableName, region, endpoint, throughput) {
