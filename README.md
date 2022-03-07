@@ -38,6 +38,9 @@ aws s3 cp backup s3://mybucket/ --recursive
 ## Notes
 - Stream ARN will not be preserved during export/import
 
+## Alternatives
+If you're doing a simple restore/backup job you may consider using AWS native [Backup Restore](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/BackupRestore.html) feature (or Point In Time Restore), priced at 0.1x c per GB it can be significantly cheaper for larger tables (100k+ rows), easier to avoid issues with autoscaling/request throttling and shifts the extra load away from your tables.
+
 ## TODO
 - Batch import: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchWriteItem-property
 
