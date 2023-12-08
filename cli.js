@@ -225,6 +225,7 @@ function filterTable(table) {
   delete table.LatestStreamLabel;
   delete table.LatestStreamArn;
   delete table.TableId;
+  delete table.SSEDescription;
 
   if (table.BillingModeSummary) {
     table.BillingMode = table.BillingModeSummary.BillingMode;
