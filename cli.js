@@ -147,7 +147,7 @@ async function listTablesCli() {
   logger.info(tables.join(' '));
 }
 
-async function listTables() {
+function listTables() {
   const dynamoDb = createDynamoDb();
 
   const params = {};
