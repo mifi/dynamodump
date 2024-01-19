@@ -2,7 +2,6 @@
 'use strict';
 
 import meow from 'meow';
-import AWS from 'aws-sdk';
 import pMap from 'p-map';
 import { readFile, writeFile } from 'fs/promises';
 import { createReadStream, createWriteStream } from 'fs';
@@ -13,7 +12,19 @@ import { promisify } from 'util';
 import Debug from 'debug';
 import throttle from 'lodash/throttle.js';
 import pick from 'lodash/pick.js';
-import https from 'https';
+import {Agent} from 'https';
+import {
+  DynamoDBClient,
+  DescribeTableCommand,
+  ListTablesCommand,
+  ScanCommand,
+  DeleteItemCommand,
+  PutItemCommand,
+  CreateTableCommand
+} from '@aws-sdk/client-dynamodb';
+import { fromIni } from '@aws-sdk/credential-providers'
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler';
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb"
 
 const pipeline = promisify(pipelineCb);
 
@@ -41,7 +52,7 @@ const cli = meow(`
     --wait-for-active Wait for table to become active when importing schema
     --profile utilize named profile from .aws/credentials file
     --throughput How many rows to delete in parallel (wipe-data)
-    --max-retries Set AWS maxRetries
+    --max-attempts Set AWS maxAttempts
     --marshall Converts JSON to/from DynamoDB record on import/export
     --endpoint Endpoint URL for DynamoDB Local
     --ca-file Set SSL certificate authority file
@@ -56,20 +67,20 @@ const cli = meow(`
     dynamodump import-data --region=eu-west-1 --table=mikael-test --file=mikael-test.dynamodata
     dynamodump wipe-data --region=eu-west-1 --table=mikael-test --throughput=10
     `,
-{
-  importMeta: import.meta,
-  flags: {
-    stackTrace: {
-      type: 'boolean',
-    },
-    waitForActive: {
-      type: 'boolean',
-    },
-    dryRun: {
-      type: 'boolean',
-    },
-  }
-});
+    {
+      importMeta: import.meta,
+      flags: {
+        stackTrace: {
+          type: 'boolean',
+        },
+        waitForActive: {
+          type: 'boolean',
+        },
+        dryRun: {
+          type: 'boolean',
+        },
+      }
+    });
 
 const logger = (() => {
   const levels = [
@@ -96,28 +107,35 @@ const logger = (() => {
 })();
 
 
-if (cli.flags.maxRetries != null) AWS.config.maxRetries = cli.flags.maxRetries;
 
-if (cli.flags.profile) {
-  AWS.config.credentials = new AWS.SharedIniFileCredentials({profile: cli.flags.profile});
-}
-
-if (cli.flags.caFile) {
-  logger.info('Using self signed cert', cli.flags.caFile);
-  const ca = await readFile(cli.flags.caFile);
-
-  AWS.config.update({
-    httpOptions: { agent: new https.Agent({ ca }) }
-  });
-}
-
-const { dryRun, table: tableName, region, endpoint } = cli.flags;
-
+const { dryRun, table: tableName  } = cli.flags;
 
 function createDynamoDb() {
-  const dynamoDbParams = { region };
-  if (endpoint) dynamoDbParams.endpoint = endpoint;
-  return new AWS.DynamoDB(dynamoDbParams);
+  const { region, endpoint, maxAttempts, profile  } = cli.flags;
+
+  let config = {region};
+
+  if (maxAttempts != null) config.maxAttempts = maxAttempts;
+  if (profile) config.credentials = fromIni({ profile });
+  if (endpoint) config.endpoint = endpoint;
+  
+  if (cli.flags.caFile) {
+    console.log('Using self signed cert', cli.flags.caFile);
+
+    const certs = [fs.readFileSync(cli.flags.caFile)];
+          
+    const agent = new Agent({
+      rejectUnauthorized: true,
+      ca: certs
+    });
+
+    config.requestHandler = new NodeHttpHandler({
+      httpAgent: agent,
+      httpsAgent: agent
+    })        
+  } 
+
+  return new DynamoDBClient(config);;
 }
 
 async function listTablesCli() {
@@ -129,14 +147,15 @@ async function listTablesCli() {
   logger.info(tables.join(' '));
 }
 
-function listTables() {
+async function listTables() {
   const dynamoDb = createDynamoDb();
 
   const params = {};
 
   let tables = [];
   async function listTablesPaged() {
-    const data = await dynamoDb.listTables(params).promise();
+    const command = new ListTablesCommand(params);
+    const data = await dynamoDb.send(command)
     tables = tables.concat(data.TableNames);
     if (data.LastEvaluatedTableName !== undefined) {
       params.ExclusiveStartTableName = data.LastEvaluatedTableName;
@@ -171,8 +190,9 @@ async function exportAllSchemaCli() {
 
 async function exportSchema(tableName, file) {
   const dynamoDb = createDynamoDb();
+  const command = new DescribeTableCommand({ TableName: tableName });
 
-  const data = await dynamoDb.describeTable({ TableName: tableName }).promise();
+  const data = await dynamoDb.send(command)
   const table = data.Table;
   const file2 = file || sanitizeFilename(tableName + '.dynamoschema');
 
@@ -195,7 +215,8 @@ async function importSchemaCli() {
   async function doWaitForActive() {
     const retries = 60;
     for (let i = 0; i < retries; i += 1) {
-      const data = await dynamoDb.describeTable({ TableName: tableName }).promise();
+      const command = new DescribeTableCommand({ TableName: tableName });
+      const data = await dynamoDb.send(command);
       if (data.Table.TableStatus === 'ACTIVE') return;
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
@@ -308,7 +329,7 @@ async function importDataCli() {
       debug('data');
 
       if (cli.flags.marshall) {
-        data = AWS.DynamoDB.Converter.marshall(data);
+        data = marshall(data);
       }
 
       n++;
@@ -318,7 +339,8 @@ async function importDataCli() {
       }
 
       try {
-        await dynamoDb.putItem({ TableName: tableName, Item: data }).promise();
+        const command = new PutItemCommand({ TableName: tableName, Item: data });
+        await dynamoDb.send(command);
         logThrottled();
         parseStream.resume();
       } catch (err) {
@@ -364,11 +386,12 @@ async function exportData(tableName, file) {
   const params = { TableName: tableName };
 
   async function scanPage() {
-    const data = await dynamoDb.scan(params).promise();
+    const command = new ScanCommand({ TableName: tableName });
+    const data = await dynamoDb.send(command);
 
     data.Items.forEach((item) => {
       if (cli.flags.marshall) {
-        item = AWS.DynamoDB.Converter.unmarshall(item);
+        item = unmarshall(item);
       }
       return stringify.write(item)
     });
@@ -420,14 +443,16 @@ async function wipeData(tableName, throughput) {
   };
 
   async function scanPage(keyFields) {
-    const data = await dynamoDb.scan(params).promise()
+    const command = new ScanCommand({ TableName: tableName });
+    const data = await dynamoDb.send(command)
 
     await pMap(data.Items, (item) => {
       const delParams = {
         TableName: tableName,
         Key: pick(item, keyFields)
       };
-      return dynamoDb.deleteItem(delParams).promise();
+      const delCommand = new DeleteItemCommand(delParams);
+      return dynamoDb.send(delCommand);
     }, { concurrency: 10 })
 
     n += data.Items.length;
@@ -439,7 +464,8 @@ async function wipeData(tableName, throughput) {
     }
   }
 
-  const table = await dynamoDb.describeTable({ TableName: tableName }).promise();
+  const descCommand = new DescribeTableCommand({ TableName: tableName });
+  const table = await dynamoDb.send(descCommand);;
   const hashKeyElement = table.Table.KeySchema.filter((entry) => entry.KeyType === 'HASH');
   const rangeKeyElement = table.Table.KeySchema.filter((entry) => entry.KeyType === 'RANGE');
 
