@@ -4,7 +4,7 @@
 import meow from 'meow';
 import pMap from 'p-map';
 import { readFile, writeFile } from 'fs/promises';
-import { createReadStream, createWriteStream } from 'fs';
+import { createReadStream, createWriteStream, readFileSync } from 'fs';
 import sanitizeFilename from 'sanitize-filename';
 import JSONStream from 'JSONStream';
 import { pipeline as pipelineCb } from 'stream';
@@ -122,7 +122,7 @@ function createDynamoDb() {
   if (cli.flags.caFile) {
     console.log('Using self signed cert', cli.flags.caFile);
 
-    const certs = [fs.readFileSync(cli.flags.caFile)];
+    const certs = [readFileSync(cli.flags.caFile)];
           
     const agent = new Agent({
       rejectUnauthorized: true,
